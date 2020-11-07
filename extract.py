@@ -75,7 +75,7 @@ def get_number_of_stream(filename):
         ret, frame = cap.read()
         if ret == False:
             break
-        cv2.imwrite('kang'+str(i)+'.jpg', frame)
+        # cv2.imwrite('kang'+str(i)+'.jpg', frame)
         i += 1
     cap.release()
     cv2.destroyAllWindows()
