@@ -1,6 +1,8 @@
 import torch as th
+import os
 import math
 import numpy as np
+import pandas as pd
 from video_loader import VideoLoader
 from torch.utils.data import DataLoader
 import argparse
@@ -8,6 +10,10 @@ from model import get_model
 from preprocessing import Preprocessing
 from random_sequence_shuffler import RandomSequenceSampler
 import torch.nn.functional as F
+import subprocess
+import cv2
+import ntpath
+
 
 parser = argparse.ArgumentParser(description='Easy video feature extractor')
 
@@ -16,17 +22,17 @@ parser.add_argument(
     type=str,
     help='input csv with video input path')
 parser.add_argument('--batch_size', type=int, default=64,
-                            help='batch size')
+                    help='batch size')
 parser.add_argument('--type', type=str, default='2d',
-                            help='CNN type')
+                    help='CNN type')
 parser.add_argument('--half_precision', type=int, default=1,
-                            help='output half precision float')
+                    help='output half precision float')
 parser.add_argument('--num_decoding_thread', type=int, default=4,
-                            help='Num parallel thread for video decoding')
+                    help='Num parallel thread for video decoding')
 parser.add_argument('--l2_normalize', type=int, default=1,
-                            help='l2 normalize feature')
+                    help='l2 normalize feature')
 parser.add_argument('--resnext101_model_path', type=str, default='model/resnext101.pth',
-                            help='Resnext model path')
+                    help='Resnext model path')
 args = parser.parse_args()
 
 dataset = VideoLoader(
@@ -47,10 +53,52 @@ loader = DataLoader(
 preprocess = Preprocessing(args.type)
 model = get_model(args)
 
+
+def path_leaf(path: str):
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
+
+
+def get_length(filename):
+    result = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                             "format=duration", "-of",
+                             "default=noprint_wrappers=1:nokey=1", filename],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+    return float(result.stdout)
+
+
+def get_number_of_stream(filename):
+    cap = cv2.VideoCapture('/content/test.mp4')
+    i = 0
+    while(cap.isOpened()):
+        ret, frame = cap.read()
+        if ret == False:
+            break
+        cv2.imwrite('kang'+str(i)+'.jpg', frame)
+        i += 1
+    cap.release()
+    cv2.destroyAllWindows()
+    return i
+
+
+def create_data_frame(df, file_name):
+    directory = os.path.dirname(file_name)
+    new_file_name = directory+"/"+path_leaf(file_name)+"_duration_frame.csv"
+
+    pd.DataFrame(df).to_csv(new_file_name, index=False,
+                            header=["name", "video_frame_nbr", "video_length"])
+
+
+df = []
 with th.no_grad():
     for k, data in enumerate(loader):
         input_file = data['input'][0]
         output_file = data['output'][0]
+        input_file_length = get_length(input_file)
+        input_file_stream_number = get_number_of_stream(input_file)
+        df.append([path_leaf(input_file),
+                   input_file_stream_number, input_file_length])
         if len(data['video'].shape) > 3:
             print('Computing features of video {}/{}: {}'.format(
                 k + 1, n_dataset, input_file))
@@ -74,3 +122,5 @@ with th.no_grad():
                 np.save(output_file, features)
         else:
             print('Video {} already processed.'.format(input_file))
+
+create_data_frame(df, args.csv)
