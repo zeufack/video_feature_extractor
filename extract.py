@@ -14,25 +14,15 @@ import subprocess
 import cv2
 import ntpath
 
-
 parser = argparse.ArgumentParser(description='Easy video feature extractor')
 
-parser.add_argument(
-    '--csv',
-    type=str,
-    help='input csv with video input path')
-parser.add_argument('--batch_size', type=int, default=64,
-                    help='batch size')
-parser.add_argument('--type', type=str, default='2d',
-                    help='CNN type')
-parser.add_argument('--half_precision', type=int, default=1,
-                    help='output half precision float')
-parser.add_argument('--num_decoding_thread', type=int, default=4,
-                    help='Num parallel thread for video decoding')
-parser.add_argument('--l2_normalize', type=int, default=1,
-                    help='l2 normalize feature')
-parser.add_argument('--resnext101_model_path', type=str, default='model/resnext101.pth',
-                    help='Resnext model path')
+parser.add_argument('--csv', type=str, help='input csv with video input path')
+parser.add_argument('--batch_size', type=int, default=64, help='batch size')
+parser.add_argument('--type', type=str, default='2d', help='CNN type')
+parser.add_argument('--half_precision', type=int, default=1, help='output half precision float')
+parser.add_argument('--num_decoding_thread', type=int, default=4, help='Num parallel thread for video decoding')
+parser.add_argument('--l2_normalize', type=int, default=1, help='l2 normalize feature')
+parser.add_argument('--resnext101_model_path', type=str, default='model/resnext101.pth', help='Resnext model path')
 args = parser.parse_args()
 
 dataset = VideoLoader(
@@ -53,13 +43,15 @@ loader = DataLoader(
 preprocess = Preprocessing(args.type)
 model = get_model(args)
 
-
 def path_leaf(path: str):
+    """
+    Returns the name of a file given its path
+    https://stackoverflow.com/a/8384788/11814682
+    """
     head, tail = ntpath.split(path)
     return tail or ntpath.basename(head)
 
-
-def get_length(filename):
+def get_length(filename : str):
     result = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
                              "format=duration", "-of",
                              "default=noprint_wrappers=1:nokey=1", filename],
@@ -67,28 +59,21 @@ def get_length(filename):
                             stderr=subprocess.STDOUT)
     return float(result.stdout)
 
-
-def get_number_of_stream(filename):
-    cap = cv2.VideoCapture('/content/test.mp4')
+def get_number_of_frames(filename : str, output_dir : str = None):
+    cap = cv2.VideoCapture(filename)
     i = 0
+    cond = output_dir and os.path.isdir(output_dir)
     while(cap.isOpened()):
         ret, frame = cap.read()
         if ret == False:
             break
-        # cv2.imwrite('kang'+str(i)+'.jpg', frame)
+        if cond  :
+            file_path = os.path.join(output_dir, filename, str(i)+'.jpg')
+            cv2.imwrite(file_path, frame)
         i += 1
     cap.release()
     cv2.destroyAllWindows()
     return i
-
-
-def create_data_frame(df, file_name):
-    directory = os.path.dirname(file_name)
-    new_file_name = directory+"/"+path_leaf(file_name)+"_duration_frame.csv"
-
-    pd.DataFrame(df).to_csv(new_file_name, index=False,
-                            header=["name", "video_frame_nbr", "video_length"])
-
 
 df = []
 with th.no_grad():
@@ -96,9 +81,12 @@ with th.no_grad():
         input_file = data['input'][0]
         output_file = data['output'][0]
         input_file_length = get_length(input_file)
-        input_file_stream_number = get_number_of_stream(input_file)
-        df.append([path_leaf(input_file),
-                   input_file_stream_number, input_file_length])
+        input_file_stream_number = get_number_of_frames(input_file)
+
+        file_name, extension = os.path.splitext(input_file) 
+
+        df.append([file_name, input_file_stream_number, input_file_length])
+
         if len(data['video'].shape) > 3:
             print('Computing features of video {}/{}: {}'.format(
                 k + 1, n_dataset, input_file))
@@ -123,4 +111,10 @@ with th.no_grad():
         else:
             print('Video {} already processed.'.format(input_file))
 
-create_data_frame(df, args.csv)
+pd.DataFrame(df).to_csv(
+                        os.path.join(
+                                os.path.dirname(args.csv), 
+                                os.path.splitext(path_leaf(args.csv))[0]+"_frame_duration.csv"
+                        ), 
+                        index = False, 
+                        header = ["file_name", "video_frame_nbr", "video_length"])
