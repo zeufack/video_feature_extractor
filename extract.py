@@ -23,7 +23,13 @@ parser.add_argument('--half_precision', type=int, default=1, help='output half p
 parser.add_argument('--num_decoding_thread', type=int, default=4, help='Num parallel thread for video decoding')
 parser.add_argument('--l2_normalize', type=int, default=1, help='l2 normalize feature')
 parser.add_argument('--resnext101_model_path', type=str, default='model/resnext101.pth', help='Resnext model path')
+parser.add_argument('--device', type=str, default='cuda', help='cuda or cpu')
 args = parser.parse_args()
+
+if args.device not in ["cpu", "cuda"] :
+    args.device = th.device('cuda' if th.cuda.is_available() else 'cpu')
+else :
+    args.device = th.device(args.device)
 
 dataset = VideoLoader(
     args.csv,

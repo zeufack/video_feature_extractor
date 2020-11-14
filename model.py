@@ -29,7 +29,7 @@ def get_model(args):
             sample_size=112,
             sample_duration=16,
             last_fc=False)
-        model = model.cuda()
+        model = model.to(args.device)
         model_data = th.load(args.resnext101_model_path)
         model.load_state_dict(model_data)
 
