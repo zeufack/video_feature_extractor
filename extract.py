@@ -23,7 +23,7 @@ parser.add_argument('--half_precision', type=int, default=1, help='output half p
 parser.add_argument('--num_decoding_thread', type=int, default=4, help='Num parallel thread for video decoding')
 parser.add_argument('--l2_normalize', type=int, default=1, help='l2 normalize feature')
 parser.add_argument('--resnext101_model_path', type=str, default='model/resnext101.pth', help='Resnext model path')
-parser.add_argument('--device', type=str, default='cuda', help='cuda or cpu')
+parser.add_argument('--device', type=str, default='cpu', help='cuda or cpu')
 args = parser.parse_args()
 
 if args.device not in ["cpu", "cuda"] :
@@ -52,6 +52,7 @@ model = get_model(args)
 def path_leaf(path: str):
     """
     Returns the name of a file given its path
+    Thanks https://github.com/Tikquuss/eulascript/blob/master/utils.py
     https://stackoverflow.com/a/8384788/11814682
     """
     head, tail = ntpath.split(path)
@@ -89,7 +90,7 @@ with th.no_grad():
         input_file_length = get_length(input_file)
         input_file_stream_number = get_number_of_frames(input_file)
 
-        file_name, extension = os.path.splitext(input_file) 
+        file_name, extension = os.path.splitext(path_leaf(input_file))
 
         df.append([file_name, input_file_stream_number, input_file_length])
 
@@ -100,12 +101,12 @@ with th.no_grad():
             if len(video.shape) == 4:
                 video = preprocess(video)
                 n_chunk = len(video)
-                features = th.cuda.FloatTensor(n_chunk, 2048).fill_(0)
+                features = th.FloatTensor(n_chunk, 2048).to(args.device).fill_(0)
                 n_iter = int(math.ceil(n_chunk / float(args.batch_size)))
                 for i in range(n_iter):
                     min_ind = i * args.batch_size
                     max_ind = (i + 1) * args.batch_size
-                    video_batch = video[min_ind:max_ind].cuda()
+                    video_batch = video[min_ind:max_ind].to(args.device)
                     batch_features = model(video_batch)
                     if args.l2_normalize:
                         batch_features = F.normalize(batch_features, dim=1)
@@ -123,4 +124,4 @@ pd.DataFrame(df).to_csv(
                                 os.path.splitext(path_leaf(args.csv))[0]+"_frame_duration.csv"
                         ), 
                         index = False, 
-                        header = ["file_name", "video_frame_nbr", "video_length"])
+                        header = ["file_name", "video_frames", "duration"])

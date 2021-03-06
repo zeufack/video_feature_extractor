@@ -19,7 +19,7 @@ def get_model(args):
         print('Loading 2D-ResNet-152 ...')
         model = models.resnet152(pretrained=True)
         model = nn.Sequential(*list(model.children())[:-2], GlobalAvgPool())
-        model = model.cuda()
+        model = model.to(args.device)
     else:
         print('Loading 3D-ResneXt-101 ...')
         model = resnext.resnet101(
